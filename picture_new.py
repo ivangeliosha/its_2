@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import messagebox
-#удалить
-#dksjfnklsdjbv;
+
 def process_and_display_images(input_path):
     try:
         # Открываем изображение
@@ -72,16 +71,27 @@ def process_and_display_images(input_path):
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+        # Вычисляем центр изображения
+        center_x, center_y = processed_image.width // 2, processed_image.height // 2
+
         # Выбираем контур, наиболее подходящий по размеру и форме
         biggest_contour = None
         max_area = 0
+        min_distance = float('inf')
         for contour in contours:
             area = cv2.contourArea(contour)
             x, y, w, h = cv2.boundingRect(contour)
             aspect_ratio = float(w) / h
 
-            if area > max_area and 0.8 <= aspect_ratio <= 1.2:  # Условие для квадратных рамок
+            # Рассчитываем расстояние от центра изображения
+            contour_center_x = x + w // 2
+            contour_center_y = y + h // 2
+            distance_to_center = ((contour_center_x - center_x) ** 2 + (contour_center_y - center_y) ** 2) ** 0.5
+
+            # Выбираем контур с максимальной площадью и ближайший к центру изображения
+            if area > max_area and 0.8 <= aspect_ratio <= 1.2 and (biggest_contour is None or distance_to_center < min_distance):
                 max_area = area
+                min_distance = distance_to_center
                 biggest_contour = contour
 
         if biggest_contour is not None:
@@ -127,6 +137,7 @@ def process_and_display_images(input_path):
     except Exception as e:
         messagebox.showerror("Error", str(e))
 
+
 def analyze_contours(image_path):
     # Загрузка изображения
     image = cv2.imread(image_path)
@@ -167,17 +178,30 @@ def analyze_contours(image_path):
         if contours:  # Проверяем, что найдены контуры
             # Выбираем максимальный контур по площади
             max_contour = max(contours, key=cv2.contourArea)
-            text_color = (255 - color[0], 255 - color[1], 255 - color[2])  # негатив цвета
-            # Получаем центр контура для размещения текста
+            contours_dict[color_name] = max_contour
+
+            # Вычисляем центр контура для сортировки
             M = cv2.moments(max_contour)
             cx = int(M["m10"] / (M["m00"] + 1e-5))  # Избегаем деление на ноль
             cy = int(M["m01"] / (M["m00"] + 1e-5))  # Избегаем деление на ноль
+            contours_centers[color_name] = cy
+
             # Подписываем цвет контура
+            text_color = (255 - color[0], 255 - color[1], 255 - color[2])  # негатив цвета
             cv2.putText(image_with_contours, color_name, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 2)
+
+    # Сортируем цвета по вертикальной координате центра контура
+    sorted_colors = sorted(contours_centers, key=contours_centers.get)
+
+    # Выводим порядок цветов сверху вниз
+    print("Порядок цветов сверху вниз:")
+    for color in sorted_colors:
+        print(color)
 
     # Сохраняем изображение с контурами
     final_image_path = "final_image_with_contours.jpg"
     cv2.imwrite(final_image_path, image_with_contours)
+
 
 def select_file_and_process():
     file_path = filedialog.askopenfilename()
