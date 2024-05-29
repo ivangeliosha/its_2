@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinter import messagebox
 #удалить
+#dksjfnklsdjbv;
 def process_and_display_images(input_path):
     try:
         # Открываем изображение
