@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import messagebox
-
+EDGE_THRESHOLD = 0.1
 def process_and_display_images(input_path):
     try:
         # Открываем изображение
@@ -59,8 +59,8 @@ def process_and_display_images(input_path):
         hsv_image = cv2.cvtColor(processed_cv_image, cv2.COLOR_RGB2HSV)
 
         # Уточненные пороговые значения для бирюзового цвета
-        lower_turquoise = np.array([85, 100, 100])
-        upper_turquoise = np.array([100, 255, 255])
+        lower_turquoise = np.array([70, 80, 80])
+        upper_turquoise = np.array([110, 255, 255])  # оттенок для бирюзового по границам увеличен
 
         mask = cv2.inRange(hsv_image, lower_turquoise, upper_turquoise)
 
@@ -71,17 +71,33 @@ def process_and_display_images(input_path):
 
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+        # Вычисляем центр изображения
+        center_x, center_y = processed_image.width // 2, processed_image.height // 2
+        edge_x_threshold = processed_image.width * EDGE_THRESHOLD
+        edge_y_threshold = processed_image.height * EDGE_THRESHOLD
+
         # Выбираем контур, наиболее подходящий по размеру и форме
         biggest_contour = None
         max_area = 0
+        min_distance = float('inf')
         for contour in contours:
             area = cv2.contourArea(contour)
             x, y, w, h = cv2.boundingRect(contour)
             aspect_ratio = float(w) / h
 
-            if area > max_area and 0.8 <= aspect_ratio <= 1.2:  # Условие для квадратных рамок
-                max_area = area
-                biggest_contour = contour
+            # Рассчитываем расстояние от центра изображения
+            contour_center_x = x + w // 2
+            contour_center_y = y + h // 2
+            distance_to_center = ((contour_center_x - center_x) ** 2 + (contour_center_y - center_y) ** 2) ** 0.5
+
+            # Проверяем, находится ли контур достаточно далеко от краёв изображения
+            if x > edge_x_threshold and (x + w) < (processed_image.width - edge_x_threshold) and \
+               y > edge_y_threshold and (y + h) < (processed_image.height - edge_y_threshold):
+                # Выбираем контур с максимальной площадью и ближайший к центру изображения
+                if area > max_area and 0.8 <= aspect_ratio <= 1.2 and (biggest_contour is None or distance_to_center < min_distance):
+                    max_area = area
+                    min_distance = distance_to_center
+                    biggest_contour = contour
 
         if biggest_contour is not None:
             # Получаем ограничивающий прямоугольник для самого большого контура
@@ -121,35 +137,24 @@ def process_and_display_images(input_path):
 
             # Сохраняем результат на компьютер
             save_processed_image(processed_image_path, cropped_image_path)
+
+            # Отображаем обработанное изображение в окне Tkinter
+            display_image_on_label(cropped_image_path)
         else:
             messagebox.showerror("Error", "Бирюзовая рамка не найдена.")
     except Exception as e:
         messagebox.showerror("Error", str(e))
-    def analyze_contours(image_path):
-        # Загрузка изображения
-        image = cv2.imread(image_path)
 
-        # Определение цветов
-        colors = {
-            "turquoise": ((85, 100, 100), (100, 255, 255)),  # бирюзовый
-            "green": ((35, 100, 100), (85, 255, 255))  # зеленый
-        }
+def display_image_on_label(image_path):
+    img = Image.open(image_path)
+    img = ImageTk.PhotoImage(img)
+    image_label.config(image=img)
+    image_label.image = img  # Сохраняем ссылку на изображение, чтобы избежать сборки мусора
 
-        # Найдем контуры для каждого цвета
-        for color_name, (lower, upper) in colors.items():
-            lower = np.array(lower, dtype="uint8")
-            upper = np.array(upper, dtype="uint8")
-
-            # Применяем пороговое значение
-            mask = cv2.inRange(image, lower, upper)
-
-            # Находим контуры
-            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-            if contours:  # Проверяем, что найдены контуры
-                # Выбираем максимальный контур по площади
-                max_contour = max(contours, key=cv2.contourArea)
-                # Дальше обработка контура и т.д.
+def analyze_contours(image_path):
+    # Загрузка изображения
+    image = cv2.imread(image_path)
+    image_with_contours = image.copy()
 
     # Определение цветов
     colors = {
@@ -186,13 +191,25 @@ def process_and_display_images(input_path):
         if contours:  # Проверяем, что найдены контуры
             # Выбираем максимальный контур по площади
             max_contour = max(contours, key=cv2.contourArea)
-            text_color = (255 - color[0], 255 - color[1], 255 - color[2])  # негатив цвета
-            # Получаем центр контура для размещения текста
+            contours_dict[color_name] = max_contour
+
+            # Вычисляем центр контура для сортировки
             M = cv2.moments(max_contour)
             cx = int(M["m10"] / (M["m00"] + 1e-5))  # Избегаем деление на ноль
             cy = int(M["m01"] / (M["m00"] + 1e-5))  # Избегаем деление на ноль
+            contours_centers[color_name] = cy
+
             # Подписываем цвет контура
+            text_color = (255 - color[0], 255 - color[1], 255 - color[2])  # негатив цвета
             cv2.putText(image_with_contours, color_name, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, text_color, 2)
+
+    # Сортируем цвета по вертикальной координате центра контура
+    sorted_colors = sorted(contours_centers, key=contours_centers.get)
+
+    # Выводим порядок цветов сверху вниз
+    print("Порядок цветов сверху вниз:")
+    for color in sorted_colors:
+        print(color)
 
     # Сохраняем изображение с контурами
     final_image_path = "final_image_with_contours.jpg"
@@ -209,13 +226,32 @@ def save_processed_image(processed_image_path, cropped_image_path):
     shutil.copyfile(processed_image_path, "new1233_processed_image.jpg")
     shutil.copyfile(cropped_image_path, "new1233_cropped_image.jpg")
 
+def center_window(window, width=300, height=200):
+    # Получаем размеры экрана
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+
+    # Рассчитываем позицию окна для центрирования
+    x = (screen_width - width) // 2
+    y = (screen_height - height) // 2
+
+    # Устанавливаем размеры и позицию окна
+    window.geometry(f'{width}x{height}+{x}+{y}')
+
 # Создаем главное окно
 root = tk.Tk()
 root.title("Image Processor")
+root.geometry("300x150")
+center_window(root, 400, 300)
 
 # Создаем кнопку для выбора файла и запуска обработки
 btn = tk.Button(root, text="Select Image", command=select_file_and_process)
-btn.pack(pady=20)
+btn.pack(pady=20, padx=20, expand=True)
+
+# Добавляем Label для отображения изображения
+image_label = tk.Label(root)
+image_label.pack(expand=True)
 
 # Запускаем главный цикл обработки событий
 root.mainloop()
+

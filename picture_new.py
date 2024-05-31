@@ -7,6 +7,8 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinter import messagebox
 
+EDGE_THRESHOLD = 0.1  # Процент отступа от краёв изображения
+
 def process_and_display_images(input_path):
     try:
         # Открываем изображение
@@ -59,8 +61,8 @@ def process_and_display_images(input_path):
         hsv_image = cv2.cvtColor(processed_cv_image, cv2.COLOR_RGB2HSV)
 
         # Уточненные пороговые значения для бирюзового цвета
-        lower_turquoise = np.array([85, 100, 100])
-        upper_turquoise = np.array([100, 255, 255])
+        lower_turquoise = np.array([70, 80, 80])
+        upper_turquoise = np.array([110, 255, 255])# оттенок для бирюзового по границам увеличен
 
         mask = cv2.inRange(hsv_image, lower_turquoise, upper_turquoise)
 
@@ -73,6 +75,8 @@ def process_and_display_images(input_path):
 
         # Вычисляем центр изображения
         center_x, center_y = processed_image.width // 2, processed_image.height // 2
+        edge_x_threshold = processed_image.width * EDGE_THRESHOLD
+        edge_y_threshold = processed_image.height * EDGE_THRESHOLD
 
         # Выбираем контур, наиболее подходящий по размеру и форме
         biggest_contour = None
@@ -88,11 +92,14 @@ def process_and_display_images(input_path):
             contour_center_y = y + h // 2
             distance_to_center = ((contour_center_x - center_x) ** 2 + (contour_center_y - center_y) ** 2) ** 0.5
 
-            # Выбираем контур с максимальной площадью и ближайший к центру изображения
-            if area > max_area and 0.8 <= aspect_ratio <= 1.2 and (biggest_contour is None or distance_to_center < min_distance):
-                max_area = area
-                min_distance = distance_to_center
-                biggest_contour = contour
+            # Проверяем, находится ли контур достаточно далеко от краёв изображения
+            if x > edge_x_threshold and (x + w) < (processed_image.width - edge_x_threshold) and \
+               y > edge_y_threshold and (y + h) < (processed_image.height - edge_y_threshold):
+                # Выбираем контур с максимальной площадью и ближайший к центру изображения
+                if area > max_area and 0.8 <= aspect_ratio <= 1.2 and (biggest_contour is None or distance_to_center < min_distance):
+                    max_area = area
+                    min_distance = distance_to_center
+                    biggest_contour = contour
 
         if biggest_contour is not None:
             # Получаем ограничивающий прямоугольник для самого большого контура
@@ -129,6 +136,7 @@ def process_and_display_images(input_path):
             axes[1, 1].set_title('Final Image with Contours')
 
             plt.show()
+            center_plot_window()
 
             # Сохраняем результат на компьютер
             save_processed_image(processed_image_path, cropped_image_path)
@@ -136,6 +144,7 @@ def process_and_display_images(input_path):
             messagebox.showerror("Error", "Бирюзовая рамка не найдена.")
     except Exception as e:
         messagebox.showerror("Error", str(e))
+
 
 
 def analyze_contours(image_path):
@@ -214,13 +223,38 @@ def save_processed_image(processed_image_path, cropped_image_path):
     shutil.copyfile(processed_image_path, "new1233_processed_image.jpg")
     shutil.copyfile(cropped_image_path, "new1233_cropped_image.jpg")
 
+
+def center_window(window, width=300, height=200):
+    # Получаем размеры экрана
+    screen_width = window.winfo_screenwidth()
+    screen_height = window.winfo_screenheight()
+
+    # Рассчитываем позицию окна для центрирования
+    x = (screen_width - width) // 2
+    y = (screen_height - height) // 2
+
+    # Устанавливаем размеры и позицию окна
+    window.geometry(f'{width}x{height}+{x}+{y}')
+def center_plot_window():
+    # Получаем размеры экрана
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+
+    # Рассчитываем позицию окна для центрирования
+    x1 = (screen_width - root.winfo_width()) // 2
+    y1 = (screen_height - root.winfo_height()) // 2
+
+    # Устанавливаем размеры и позицию окна
+    root.geometry(f'+{x1}+{y1}')
+
 # Создаем главное окно
 root = tk.Tk()
 root.title("Image Processor")
-
+root.geometry("300x150")
+center_window(root, 400, 300)
 # Создаем кнопку для выбора файла и запуска обработки
 btn = tk.Button(root, text="Select Image", command=select_file_and_process)
-btn.pack(pady=20)
+btn.pack(pady=20, padx=20, expand=True)
 
 # Запускаем главный цикл обработки событий
 root.mainloop()
